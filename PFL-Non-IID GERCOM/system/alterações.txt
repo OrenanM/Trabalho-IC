@@ -1,0 +1,51 @@
+Argumento utilizados:
+
+    parser.add_argument('-c', '--cluster', default=None) ->
+        Argumento: -c' ou '--cluster':
+        Descrição: Seleciona o tipo de cluster (cka, kmeans, kmedoids, etc) que será utilizado durante o treinamento. Por padrão, o treinamento não é clusterizado.
+        Tipo: String
+        Valor Padrão: None
+
+    parser.add_argument('-ncl', "--num_clusters", type=int, default=4) # numero de cluster
+        Determina o número de clusters que serão criados pelo algoritmo de clusterização
+    
+    parser.add_argument('-cp', "--clustering_period", type=int, default=1) ->
+        Define o periodo (em epocas) que ocorrerá clusterização, inicialmente, 
+        será clusterizado em todas as rodadas
+
+    parser.add_argument('-ns', "--num_select", type=int, default=2) ->
+        Define a quantidade de cluster que serão selecionados para treinamento
+
+    parser.add_argument('-ws', "--weigth_select", type=bool, default=False) ->
+        Atribui pesos aos cluster utilizando o número de clientes presente em cada 
+        cluster, um cluster com mais clientes, terá mais chance de ser selecionado 
+        para treinamento
+
+    parser.add_argument('-sc', "--select_conseq", type=bool, default=True) ->
+        Determina se um cliente poderá ser selecionado em duas rodadas consecutivas
+
+    parser.add_argument('-wc', '--weigths_clients', type=int, default=1) ->
+        Atribui pesos aos clientes utilizando o número de dados presente em cada 
+        cliente, um cliente com mais dados, terá mais chance de ser selecionado 
+        para treinamento
+
+    parser.add_argument('-tsa', '--type_select', type = str, default='A') ->
+        A. Seleção Aleatória Uniforme de 30% dos Clientes, Distribuindo de Forma Equitativa entre os Clusters:
+
+            Descrição: Seleção de 30% dos clientes, garantindo uma distribuição uniforme, escolhendo um número igual de clientes de cada cluster.
+            Método: Utilização do algoritmo CKA.
+
+        B. Seleção de 30% dos Clientes de Cada Cluster:
+
+            Descrição: Escolha de 30% dos clientes de cada cluster individualmente.
+            Método: Aplicação do algoritmo CKA.
+
+        C. Seleção de 30% de Cada Cluster com Pesos nos Clientes:
+
+            Descrição: Seleção de 30% dos clientes de cada cluster, considerando pesos específicos para cada cliente.
+            Método: Implementação do algoritmo CKA com atribuição de pesos aos clientes dentro de cada cluster.
+
+
+    parser.add_argument('-sp', '--select_partial', type=bool, default=False) ->
+        Seleciona apanas as camadas 0 e 2 para o calculo do cluster
+    
