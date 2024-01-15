@@ -21,11 +21,9 @@ class FedAvg(Server):
 
 
     def train(self):
-        round_no_improve = 0
         for round in range(self.global_rounds+1):
             s_t = time.time()
             self.selected_clients = self.select_clients()
-            self.send_models()
 
             if round%self.eval_gap == 0:
                 print(f"\n-------------Round number: {round}-------------")
@@ -49,24 +47,9 @@ class FedAvg(Server):
             self.Budget.append(time.time() - s_t)
             print('-'*25, 'time cost', '-'*25, self.Budget[-1])
 
-            with open(f"{self.algorithm}_metrics_{self.entropy}_{self.weigths_clients}_{self.fall_tolerance}.txt", "a") as arquivo:
-                arquivo.write(f"{self.Budget[-1]} \n")
 
             if self.auto_break and self.check_done(acc_lss=[self.rs_test_acc], top_cnt=self.top_cnt):
                 break
-            
-            if (round > 0) :
-                if (self.rs_test_acc[round-1] + self.fall_tolerance) < (self.rs_test_acc[round]):
-                    round_no_improve = 0
-                else:
-                    round_no_improve += 1
-            
-            if (round_no_improve >= 5):
-                print(f'Early stopping no round {round}.')
-                self.send_models()
-                with open(f"{self.algorithm}_metrics_{self.entropy}_{self.weigths_clients}_{self.fall_tolerance}_exe.txt", "a") as arquivo:
-                    arquivo.write(f"{self.times}, {round}, {sys.getsizeof(self.global_model)}, {sys.getsizeof(self.global_model.parameters())} \n")
-                round_no_improve = 0
                 
 
         print("\nBest accuracy.")
