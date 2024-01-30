@@ -1,1 +1,0 @@
-acc, loss, weigths_clients, entropy, temp

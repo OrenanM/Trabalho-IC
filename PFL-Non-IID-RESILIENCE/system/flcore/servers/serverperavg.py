@@ -19,7 +19,7 @@ class PerAvg(Server):
 
     def train(self):
         for i in range(self.global_rounds+1):
-            self.selected_clients = self.select_clients()
+            self.selected_clients = self.select_entropy_size()
             # send all parameter for clients
             self.send_models()
 

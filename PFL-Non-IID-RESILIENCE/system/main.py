@@ -426,25 +426,13 @@ if __name__ == "__main__":
 
     #Variações seleção
     parser.add_argument('-c', '--cluster', default=None)
-    parser.add_argument('-pa', '--patience', type=int, default=5) #controla a parada
-    parser.add_argument('-ft', '--fall_tolerance', type=float, default=0.01) #controla a parada (tolerancia na queda)
-    parser.add_argument('-cp', "--clustering_period", type=int, default=1) # periodo de clusterização
-    parser.add_argument('-ns', "--num_select", type=int, default=2) # numero de cluster selecionados
-    parser.add_argument('-ws', "--weigth_select", type=int, default=0) # da pesos aos cluster
     parser.add_argument('-e', "--entropy", type=int, default=0) # da pesos com as entropias
-    parser.add_argument('-sc', "--select_conseq", type=int, default=1) # seleciona dois cluster consecutivamente ou não
     parser.add_argument('-ncl', "--num_clusters", type=int, default=4) # numero de cluster
-    parser.add_argument('-wc', '--weigths_clients', type=int, default=0) #atribui pesos aos clientes
-    parser.add_argument('-sp', '--select_partial', type=int, default=0) #seleciona só as camadas 0 e 2
     parser.add_argument('-tsa', '--type_select', type = str, default='A') 
+    parser.add_argument('-cf', '--client_fake', type = int, default=0) 
     parser.add_argument('-wse', '--weigth_size_entropy', type = int, default=0) 
 
     args = parser.parse_args()
-
-
-    with open(f"{args.algorithm}_metrics_{args.weigth_size_entropy}.txt", "w") as arquivo:
-        arquivo.write(f"acc, loss, temp\n")
-    
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.device_id
 

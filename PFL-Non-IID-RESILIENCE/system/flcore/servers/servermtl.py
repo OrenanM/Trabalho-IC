@@ -28,7 +28,7 @@ class FedMTL(Server):
 
     def train(self):
         for i in range(self.global_rounds+1):
-            self.selected_clients = self.select_clients()
+            self.selected_clients = self.select_entropy_size()
             self.aggregate_parameters()
 
             if i%self.eval_gap == 0:

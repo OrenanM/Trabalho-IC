@@ -2,6 +2,7 @@ import time
 from flcore.clients.clientavg import clientAVG
 from flcore.servers.serverbase import Server
 from threading import Thread
+import sys
 
 
 class FedAvg(Server):
@@ -24,25 +25,7 @@ class FedAvg(Server):
         for i in range(self.global_rounds+1):
             
             s_t = time.time()
-            if self.weigth_size_entropy == 1:
-                self.selected_clients = self.select_clients()
-            elif self.weigth_size_entropy == 2:
-                self.selected_clients = self.select_entropy()
-            elif self.weigth_size_entropy == 3:
-                self.selected_clients = self.select_size()
-            elif self.weigth_size_entropy == 4:
-                self.selected_clients = self.select_clients_1()
-            elif self.weigth_size_entropy == 5:
-                self.selected_clients = self.select_clients_2()
-            elif self.weigth_size_entropy == 7:
-                self.selected_clients = self.select_clients_3()
-            elif self.weigth_size_entropy == 8:
-                self.selected_clients = self.select_size_entropy()
-            elif self.weigth_size_entropy == 9:
-                self.selected_clients = self.select_entropy_size()
-                
-            else:
-                self.selected_clients = self.select_random() 
+            self.selected_clients = self.select_clients()
             self.send_models()
 
             if i%self.eval_gap == 0:

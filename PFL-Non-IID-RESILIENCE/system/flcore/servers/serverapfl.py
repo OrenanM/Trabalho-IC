@@ -19,7 +19,7 @@ class APFL(Server):
 
     def train(self):
         for i in range(self.global_rounds+1):
-            self.selected_clients = self.select_clients()
+            self.selected_clients = self.select_entropy_size()
             self.send_models()
 
             if i%self.eval_gap == 0:

@@ -14,6 +14,7 @@ from utils.data_utils import read_client_data
 from utils.dlg import DLG
 from flcore.cluster.cka import CKA
 from sklearn.cluster import SpectralClustering
+from flcore.clients.clientfake import ClientFake
 
 class Server(object):
     def __init__(self, args, times):
@@ -72,29 +73,36 @@ class Server(object):
         self.clients_weigths = []
         self.current_round = -1
         self.cluster = args.cluster
-        self.num_select = args.num_select
         self.num_clusters = args.num_clusters
-        self.clustering_period = args.clustering_period
-        self.weigth_select = args.weigth_select
-        self.select_conseq = args.select_conseq
         self.clients_cluster = dict()
-        self.weigths_clients = args.weigths_clients
         self.entropy = args.entropy
         self.type_select = args.type_select
-        self.patience = args.patience
-        self.fall_tolerance = args.fall_tolerance
         self.weigth_size_entropy = args.weigth_size_entropy
+        self.client_fake = args.client_fake
 
     def set_clients(self, clientObj):
+        
+        random_index = random.sample(range(self.num_clients), 2)
+
+        print(random_index)
         for i, train_slow, send_slow in zip(range(self.num_clients), self.train_slow_clients, self.send_slow_clients):
             train_data = read_client_data(self.dataset, i, is_train=True)
             test_data = read_client_data(self.dataset, i, is_train=False)
-            client = clientObj(self.args, 
-                            id=i, 
-                            train_samples=len(train_data), 
-                            test_samples=len(test_data), 
-                            train_slow=train_slow, 
-                            send_slow=send_slow)
+            if i in random_index and self.client_fake == 1:
+                client = ClientFake(self.args, 
+                                    id=i, 
+                                    train_samples=len(train_data), 
+                                    test_samples=len(test_data), 
+                                    train_slow=train_slow, 
+                                    send_slow=send_slow)
+                
+            else:
+                client = clientObj(self.args, 
+                                    id=i, 
+                                    train_samples=len(train_data), 
+                                    test_samples=len(test_data), 
+                                    train_slow=train_slow, 
+                                    send_slow=send_slow)
             self.clients.append(client)
 
     # random select slow clients
@@ -115,6 +123,58 @@ class Server(object):
 
     
 # ***********************************************************************************************************************************
+    def save_results_txt(self, acc, loss):
+        type_sel = self.type_select
+        result_path = 'result'
+
+        #cria o diretório de resultados
+        if not os.path.exists(result_path):
+            os.mkdir(result_path)
+
+        #cria o diretório de resultados de cada seleção
+        sel_path = os.path.join(result_path, type_sel)
+        if not os.path.exists(sel_path):
+            os.mkdir(sel_path)
+
+        name_file = f"nclients{self.num_clients}_jr{self.join_ratio}_cf" + \
+                    f"{self.client_fake}.txt"
+        path_file = os.path.join(sel_path, name_file)
+
+        #cria o arquivo txt caso não exista
+        if (not os.path.exists(path_file)) or (self.times == 0) and (self.current_round == 0):
+            with open(path_file, "w") as arquivo:
+                arquivo.write(f"acc,loss\n{acc}, {loss}\n")
+        else:
+            with open(path_file, "a") as arquivo:
+                arquivo.write(f"{acc}, {loss}\n")
+    
+    def calculate_entropy(self):
+        entropies = np.array([client.client_entropy() for client in self.clients])
+        entropies[np.isnan(entropies)] = 0
+
+        for client, entropy in zip(self.clients, entropies):
+            client.entropy = entropy
+
+    def select_clients(self):
+        self.current_round += 1
+
+        if self.current_round == 0: #calcula a entropia
+            self.calculate_entropy()
+        
+        #seleciona o tipo de seleção
+        if self.type_select == "A":
+            selected_clients = self.select_random()
+        elif self.type_select == "B":
+            selected_clients = self.select_entropy_size()
+        elif self.type_select == "C":
+            selected_clients = self.select_entropy()
+        elif self.type_select == "D":
+            selected_clients = self.select_size()
+        elif self.type_select == "E":
+            selected_clients = self.select_entropy_size_polynomial()
+
+        return selected_clients
+
     def select_random(self):
         '''Seleciona os clientes de forma aleatória'''
         if self.random_join_ratio:
@@ -125,225 +185,97 @@ class Server(object):
         selected_clients = list(np.random.choice(self.clients, self.current_num_join_clients, replace=False))
         return selected_clients
     
-    def calculate_entropy(self):
-        entropies = np.array([client.client_entropy() for client in self.clients])
-        entropies[np.isnan(entropies)] = 0
+    def select_entropy_size(self):
+        """
+        Seleciona clientes com base em uma porcentagem (jr) do total de clientes,
+        aplicando pesos proporcionais ao tamanho do conjunto de dados e à entropia.
 
-        for client, entropy in zip(self.clients, entropies):
-            client.entropy = entropy
+        Seleciona 2 vezes jr clientes com pesos proporcionais ao tamanho do conjunto de dados.
+        Em seguida, escolhe jr clientes adicionais com pesos determinados pela entropia.
 
-    def select_clients(self):
-        if self.current_round == 0:
-            self.calculate_entropy()
-        num_select_size = round(len(self.clients) * 0.2)
-        num_select_entropy = round(len(self.clients) * 0.1)
+        """
+        num_select_size = round(len(self.clients) * self.join_ratio * 2)
+        num_select_entropy = round(len(self.clients) * self.join_ratio)
 
+        #Calula os pesos do dataset
         weigth_size = np.array([client.train_samples for client in self.clients])
         weigth_size = weigth_size/weigth_size.sum()
 
+        #Seleciona com peso dos tamanho do dataset
         clients_select_size = np.random.choice(self.clients, num_select_size, 
                                                p = weigth_size, replace=False)
 
+        #Calcula os pesos da entropia
         weigth_entropy = np.array([client.entropy for client in clients_select_size])
         weigth_entropy = weigth_entropy/weigth_entropy.sum()
 
+        #Seleciona com peso da entropia
         clients_select_entropy = np.random.choice(clients_select_size, num_select_entropy,
                                                   p=weigth_entropy, replace=False)
         
         return clients_select_entropy
-
-    def select_clients_1(self):
-        if self.current_round == 0:
-            self.calculate_entropy()
-
-        num_select_size = round(len(self.clients) * 0.3)
-        num_select_entropy = round(len(self.clients) * 0.2)
-
-        pre_selected_clients = self.selected_clients.copy()
-        size_selected = round(len(pre_selected_clients) * 0.6)
-        not_selected = np.random.choice(pre_selected_clients, size_selected)
-        print(f"selecionados anteriormente: {[client.id for client in self.selected_clients]}")
-        print(f"não selecionar: {[client.id for client in not_selected]}")
-        select_clients = [client for client in self.clients if client not in not_selected]
-
-        weigth_size = np.array([client.train_samples for client in select_clients])
-        weigth_size = weigth_size/weigth_size.sum()
-
-        clients_select_size = np.random.choice(select_clients, num_select_size, 
-                                               p = weigth_size, replace=False)
-
-        weigth_entropy = np.array([client.entropy for client in clients_select_size])
-        weigth_entropy = weigth_entropy/weigth_entropy.sum()
-
-        clients_select_entropy = np.random.choice(clients_select_size, num_select_entropy,
-                                                  p=weigth_entropy, replace=False)
-        print(f"selecionados: {[client.id for client in clients_select_entropy]}")
-        
-        return clients_select_entropy
     
-    def select_clients_2(self):
-        if self.current_round == 0:
-            self.calculate_entropy()
+    def select_entropy_size_polynomial(self):
+        """
+        Aplica pesos considerando a entropia e o tamanho do conjunto de dados, 
+        aumentando a distância entre esses pesos por meio de uma função polinomial 
+        quíntupla, como f(x) = x⁵.
 
-        num_select_size = round(len(self.clients) * 0.3)
-        num_select_entropy = round(len(self.clients) * 0.2)
-
-        pre_selected_clients = self.selected_clients.copy()
-        size_selected = round(len(pre_selected_clients) * 0.5)
-        not_selected = np.random.choice(pre_selected_clients, size_selected, replace=False)
-
-        print(f"selecionados anteriormente: {[client.id for client in self.selected_clients]}")
-        print(f"não selecionar: {[client.id for client in not_selected]}")
-
-        select_clients = [client for client in self.clients if client not in not_selected]
-
-        weigth_size = np.array([client.train_samples for client in select_clients])
+            -Seleciona 2 vezes jr clientes com pesos proporcionais ao tamanho do conjunto 
+            de dados, ajustando a distância com a função polinomial quíntupla.
+            -Em seguida, escolhe jr clientes adicionais com pesos determinados pela entropia, 
+            também ajustando a distância com a função polinomial quíntupla.
+        """
+        num_select_size = round(len(self.clients) * 2 * self.join_ratio)
+        num_select_entropy = round(len(self.clients) * self.join_ratio)
+        
+        #Calula os pesos do dataset
+        weigth_size = np.array([client.train_samples for client in self.clients])
         weigth_size = weigth_size/weigth_size.sum()
 
-        weigth_size_ajusted = weigth_size ** 3
-        weigth_size_ajusted = weigth_size_ajusted/sum(weigth_size_ajusted)
-        weigth_size_ajusted = weigth_size_ajusted/sum(weigth_size_ajusted)
-
-        clients_select_size = np.random.choice(select_clients, num_select_size, 
-                                               p = weigth_size_ajusted, replace=False)
-
-        weigth_entropy = np.array([client.entropy for client in clients_select_size])
-        weigth_entropy = weigth_entropy/weigth_entropy.sum()
-
-        weigth_entropy_ajusted = weigth_entropy ** 3
-        weigth_entropy_ajusted = weigth_entropy_ajusted/sum(weigth_entropy_ajusted)
-        weigth_entropy_ajusted = weigth_entropy_ajusted/sum(weigth_entropy_ajusted)
-
-        clients_select_entropy = np.random.choice(clients_select_size, num_select_entropy,
-                                                  p=weigth_entropy_ajusted, replace=False)
-        print(f"selecionados: {[client.id for client in clients_select_entropy]}")
-        
-        return clients_select_entropy
-    
-    def select_clients_3(self):
-        if self.current_round == 0:
-            self.calculate_entropy()
-
-
-        num_select_size = round(len(self.clients) * 0.2)
-        num_select_entropy = round(len(self.clients) * 0.1)
-        
-        pre_selected_clients = self.selected_clients.copy()
-        size_selected = round(len(pre_selected_clients) * 0)
-
-        sort_size_clients = sorted(self.selected_clients, key = lambda client: client.entropy)
-
-        not_selected = sort_size_clients[:size_selected]
-
-        print(f"selecionados anteriormente: {[client.id for client in self.selected_clients]}")
-        print(f"não selecionar: {[client.id for client in not_selected]}")
-
-        select_clients = [client for client in self.clients if client not in not_selected]
-
-        weigth_size = np.array([client.train_samples for client in select_clients])
-        weigth_size = weigth_size/weigth_size.sum()
-
+        #aplica a função polinomial
         weigth_size_ajusted = weigth_size ** 5
+
         weigth_size_ajusted = weigth_size_ajusted/sum(weigth_size_ajusted)
         weigth_size_ajusted = weigth_size_ajusted/sum(weigth_size_ajusted)
 
-        clients_select_size = np.random.choice(select_clients, num_select_size, 
+        #Seleciona com peso dos tamanho do dataset
+        clients_select_size = np.random.choice(self.clients, num_select_size, 
                                                p = weigth_size_ajusted, replace=False)
 
+        #Calula os pesos do dataset da entropia
         weigth_entropy = np.array([client.entropy for client in clients_select_size])
         weigth_entropy = weigth_entropy/weigth_entropy.sum()
 
-        weigth_entropy_ajusted = weigth_entropy ** 5
+        #aplica a função polinomial
+        weigth_entropy_ajusted = weigth_entropy ** 5 
+
         weigth_entropy_ajusted = weigth_entropy_ajusted/sum(weigth_entropy_ajusted)
         weigth_entropy_ajusted = weigth_entropy_ajusted/sum(weigth_entropy_ajusted)
 
+        #Seleciona com peso da entropia
         clients_select_entropy = np.random.choice(clients_select_size, num_select_entropy,
                                                   p=weigth_entropy_ajusted, replace=False)
-        print(f"selecionados: {[client.id for client in clients_select_entropy]}")
-        
-        return clients_select_entropy
-    
-    def select_clients_4(self):
-        if self.current_round == 0:
-            self.calculate_entropy()
-
-
-        num_select_size = round(len(self.clients) * 0.3)
-        num_select_entropy = round(len(self.clients) * 0.2)
-        
-        pre_selected_clients = self.selected_clients.copy()
-        size_selected = round(len(pre_selected_clients) * 0.4)
-
-        sort_size_clients = sorted(self.selected_clients, key = lambda client: client.entropy)
-
-        not_selected = sort_size_clients[:size_selected]
-
-        print(f"selecionados anteriormente: {[client.id for client in self.selected_clients]}")
-        print(f"não selecionar: {[client.id for client in not_selected]}")
-
-        select_clients = [client for client in self.clients if client not in not_selected]
-
-        weigth_size = np.array([client.train_samples for client in select_clients])
-        weigth_size = weigth_size/weigth_size.sum()
-
-        weigth_size_ajusted = np.sqrt(weigth_size)
- 
-        weigth_size_ajusted = weigth_size_ajusted/sum(weigth_size_ajusted)
-        weigth_size_ajusted = weigth_size_ajusted/sum(weigth_size_ajusted)
-
-        clients_select_size = np.random.choice(select_clients, num_select_size, 
-                                               p = weigth_size_ajusted, replace=False)
-
-        weigth_entropy = np.array([client.entropy for client in clients_select_size])
-        weigth_entropy = weigth_entropy/weigth_entropy.sum()
-
-        weigth_entropy_ajusted = np.sqrt(weigth_entropy)
-        
-        weigth_entropy_ajusted = weigth_entropy_ajusted/sum(weigth_entropy_ajusted)
-        weigth_entropy_ajusted = weigth_entropy_ajusted/sum(weigth_entropy_ajusted)
-
-        clients_select_entropy = np.random.choice(clients_select_size, num_select_entropy,
-                                                  p=weigth_entropy_ajusted, replace=False)
-        print(f"selecionados: {[client.id for client in clients_select_entropy]}")
         
         return clients_select_entropy
     
     def select_entropy(self):
-        num_select_entropy = round(len(self.clients) * 0.1)
+        "Seleciona os clientes com pesos proporcionais as suas entropias"
+
+        num_select_entropy = round(len(self.clients) * self.join_ratio)
         sort_entropy = sorted(self.clients, key = lambda client: client.entropy, reverse=True)
         clients_select_size = sort_entropy[:num_select_entropy]
         return clients_select_size
     
     def select_size(self):
-        num_select_size = round(len(self.clients) * 0.1)
+        "Seleciona os clientes com pesos proporcionais ao tamanho de seus datasets"
+        num_select_size = round(len(self.clients) * self.join_ratio)
         
         sort_size = sorted(self.clients, key = lambda client: client.train_samples, reverse=True)
         clients_select_size = sort_size[:num_select_size]
         print(f"selecionados: {[client.id for client in clients_select_size]}")
         return clients_select_size
     
-    def select_size_entropy(self):
-        num_select_size = round(len(self.clients) * 0.2)
-        
-        sort_size = sorted(self.clients, key = lambda client: client.train_samples, reverse=True)
-        clients_select_size = sort_size[:num_select_size]
-
-        num_select_entropy = round(len(self.clients) * 0.1)
-        sort_entropy = sorted(clients_select_size, key = lambda client: client.entropy, reverse=True)
-        clients_select_entropy = sort_entropy[:num_select_entropy]
-
-        return clients_select_entropy
-    
-    def select_entropy_size(self):
-        num_select_entropy = round(len(self.clients) * 0.2)
-        sort_entropy = sorted(self.clients, key = lambda client: client.entropy, reverse=True)
-        clients_select_entropy = sort_entropy[:num_select_entropy]
-
-        num_select_size = round(len(self.clients) * 0.1)
-        
-        sort_size = sorted(clients_select_entropy, key = lambda client: client.train_samples, reverse=True)
-        clients_select_size = sort_size[:num_select_size]
-        return clients_select_size
     
     def valueOfList(self, value):
         """
@@ -486,7 +418,7 @@ class Server(object):
         model_path = os.path.join("models", self.dataset)
         model_path = os.path.join(model_path, self.algorithm + "_server" + ".pt")
         return os.path.exists(model_path)
-        
+ 
     def save_results(self):
         algo = self.dataset + "_" + self.algorithm
         result_path = "../results/"
@@ -565,9 +497,7 @@ class Server(object):
         else:
             loss.append(train_loss)
 
-        with open(f"{self.algorithm}_metrics_{self.weigth_size_entropy}.txt", "a") as arquivo:
-            arquivo.write(f"{test_acc}, {train_loss} \n")
-        
+        self.save_results_txt(test_acc, train_loss)
 
         print("Averaged Train Loss: {:.4f}".format(train_loss))
         print("Averaged Test Accurancy: {:.4f}".format(test_acc))

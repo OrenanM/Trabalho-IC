@@ -25,7 +25,7 @@ class MOON(Server):
         round_no_improve = 0
         for i in range(self.global_rounds+1):
             s_t = time.time()
-            self.selected_clients = self.select_clients()
+            self.selected_clients = self.select_entropy_size()
             if i == 0:
                 self.send_models()
             

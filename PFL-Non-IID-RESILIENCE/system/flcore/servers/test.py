@@ -7,6 +7,6 @@ class Server_modif(Server):
 
 if __name__ == "__main__":
     servidor = Server_modif()
-    id = servidor.select_clients()
+    id = servidor.select_entropy_size()
 
     print(id)

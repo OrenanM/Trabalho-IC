@@ -19,14 +19,14 @@ class Local(Server):
 
     def train(self):
         for i in range(self.global_rounds+1):
-            self.selected_clients = self.select_clients()
+            self.selected_clients = self.select_entropy_size()
 
             if i%self.eval_gap == 0:
                 print(f"\n-------------Round number: {i}-------------")
                 print("\nEvaluate personalized models")
                 self.evaluate()
 
-            self.selected_clients = self.select_clients()
+            self.selected_clients = self.select_entropy_size()
             for client in self.selected_clients:
                 client.train()
 
