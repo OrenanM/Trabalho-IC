@@ -84,7 +84,6 @@ class Server(object):
         
         random_index = random.sample(range(self.num_clients), 2)
 
-        print(random_index)
         for i, train_slow, send_slow in zip(range(self.num_clients), self.train_slow_clients, self.send_slow_clients):
             train_data = read_client_data(self.dataset, i, is_train=True)
             test_data = read_client_data(self.dataset, i, is_train=False)
@@ -158,7 +157,7 @@ class Server(object):
     def select_clients(self):
         self.current_round += 1
 
-        if self.current_round == 0: #calcula a entropia
+        if self.current_round == 0 and self.entropy == 1: #calcula a entropia
             self.calculate_entropy()
         
         #seleciona o tipo de seleção

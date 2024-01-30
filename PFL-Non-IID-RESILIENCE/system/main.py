@@ -426,7 +426,7 @@ if __name__ == "__main__":
 
     #Variações seleção
     parser.add_argument('-c', '--cluster', default=None)
-    parser.add_argument('-e', "--entropy", type=int, default=0) # da pesos com as entropias
+    parser.add_argument('-e', "--entropy", type=int, default=1) # da pesos com as entropias
     parser.add_argument('-ncl', "--num_clusters", type=int, default=4) # numero de cluster
     parser.add_argument('-tsa', '--type_select', type = str, default='A') 
     parser.add_argument('-cf', '--client_fake', type = int, default=0) 
