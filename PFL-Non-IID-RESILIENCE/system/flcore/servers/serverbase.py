@@ -79,15 +79,20 @@ class Server(object):
         self.type_select = args.type_select
         self.weigth_size_entropy = args.weigth_size_entropy
         self.client_fake = args.client_fake
+        self.num_client_fake = args.num_client_fake
+        self.remove_cf = args.remove_cf
 
     def set_clients(self, clientObj):
         
-        random_index = random.sample(range(self.num_clients), 2)
+        id_client_fake = random.sample(range(self.num_clients), self.num_client_fake)
+        self.id_fake = id_client_fake
+        
+        print(f'Clientes falsos: {id_client_fake}')
 
         for i, train_slow, send_slow in zip(range(self.num_clients), self.train_slow_clients, self.send_slow_clients):
             train_data = read_client_data(self.dataset, i, is_train=True)
             test_data = read_client_data(self.dataset, i, is_train=False)
-            if i in random_index and self.client_fake == 1:
+            if i in id_client_fake and self.client_fake == 1:
                 client = ClientFake(self.args, 
                                     id=i, 
                                     train_samples=len(train_data), 
@@ -136,7 +141,7 @@ class Server(object):
             os.mkdir(sel_path)
 
         name_file = f"nclients{self.num_clients}_jr{self.join_ratio}_cf" + \
-                    f"{self.client_fake}.txt"
+                    f"{self.client_fake}_remove{self.remove_cf}_ncf{self.num_client_fake}.txt"
         path_file = os.path.join(sel_path, name_file)
 
         #cria o arquivo txt caso não exista
@@ -214,7 +219,7 @@ class Server(object):
         
         return clients_select_entropy
     
-    def select_entropy_size_polynomial(self):
+    def select_entropy_size_polynomial(self, select_substitute = False, num_substitute = 0):
         """
         Aplica pesos considerando a entropia e o tamanho do conjunto de dados, 
         aumentando a distância entre esses pesos por meio de uma função polinomial 
@@ -225,11 +230,22 @@ class Server(object):
             -Em seguida, escolhe jr clientes adicionais com pesos determinados pela entropia, 
             também ajustando a distância com a função polinomial quíntupla.
         """
-        num_select_size = round(len(self.clients) * 2 * self.join_ratio)
-        num_select_entropy = round(len(self.clients) * self.join_ratio)
-        
+        if select_substitute == False:
+            #seleção em todos os clientes
+            select = self.clients 
+        else: 
+            #não repete clientes ja selecionados
+            select = [client for client in self.clients if client not in self.selected_clients]
+
+        num_select_size = round(len(select) * 2 * self.join_ratio)
+
+        if num_substitute == 0:
+            num_select = round(len(self.clients) * self.join_ratio)
+        else:
+            num_select = num_substitute
+
         #Calula os pesos do dataset
-        weigth_size = np.array([client.train_samples for client in self.clients])
+        weigth_size = np.array([client.train_samples for client in select])
         weigth_size = weigth_size/weigth_size.sum()
 
         #aplica a função polinomial
@@ -239,7 +255,7 @@ class Server(object):
         weigth_size_ajusted = weigth_size_ajusted/sum(weigth_size_ajusted)
 
         #Seleciona com peso dos tamanho do dataset
-        clients_select_size = np.random.choice(self.clients, num_select_size, 
+        clients_select_size = np.random.choice(select, num_select_size, 
                                                p = weigth_size_ajusted, replace=False)
 
         #Calula os pesos do dataset da entropia
@@ -253,7 +269,7 @@ class Server(object):
         weigth_entropy_ajusted = weigth_entropy_ajusted/sum(weigth_entropy_ajusted)
 
         #Seleciona com peso da entropia
-        clients_select_entropy = np.random.choice(clients_select_size, num_select_entropy,
+        clients_select_entropy = np.random.choice(clients_select_size, num_select,
                                                   p=weigth_entropy_ajusted, replace=False)
         
         return clients_select_entropy
@@ -274,55 +290,6 @@ class Server(object):
         clients_select_size = sort_size[:num_select_size]
         print(f"selecionados: {[client.id for client in clients_select_size]}")
         return clients_select_size
-    
-    
-    def valueOfList(self, value):
-        """
-    Retorna uma lista que contém todos os valores inteiros e flutuantes contidos em uma estrutura de dados aninhada.
-
-    Args:
-        value (list, np.ndarray, torch.Tensor): A estrutura de dados da qual você deseja extrair valores inteiros e flutuantes.
-
-    Returns:
-        list: Uma lista contendo todos os valores inteiros e flutuantes encontrados na estrutura de dados.
-
-    Note:
-        - A função aceita estruturas de dados aninhadas (listas dentro de listas).
-        - Se `value` for uma instância de `torch.Tensor`, ela será convertida em um array numpy e depois em uma lista.
-        - Se `value` for uma instância de `np.ndarray`, ela será convertida em uma lista.
-        - A função recursivamente percorre estruturas de dados aninhadas para extrair todos os valores inteiros e flutuantes.
-        - Os valores inteiros e flutuantes extraídos são adicionados à lista `valueList`.
-
-    Exemplos:
-        >>> obj = SuaClasse()
-        >>> tensor = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-        >>> lista = [1, [2, 3.5], [[4, 5.0], 6]]
-        >>> obj.valueOfList(tensor)
-        [1.0, 2.0, 3.0, 4.0]
-        >>> obj.valueOfList(lista)
-        [1, 2, 3.5, 4, 5.0, 6]
-    """
-
-        valueList = list()
-    
-        if type(value) == torch.Tensor:
-            value = value.cpu().numpy()
-            value = value.tolist()
-            self.valueOfList(value)
-
-        if type(value) == np.ndarray:
-            value = value.tolist()
-            self.valueOfList(value)
-
-        if type(value) == list and len(value) > 0:
-            for i in range(len(value)):
-                if type(value[i]) == list and len(value[i]) > 0:
-                    valueList += self.valueOfList(value[i])
-
-                elif type(value[i]) == int or type(value[i]) == float:
-                    valueList.append(value[i])
-
-            return valueList
         
     def print_cluster_clientes(self):
         '''Mostra o dataframe que relacionado clusters e clientes'''
@@ -337,6 +304,93 @@ class Server(object):
         df = df.sort_values(by='Cluster')
         print(df.to_string(index=False))
 
+        #exibe o score de cada cluster
+        score_sort = {chave: valor for chave, valor in 
+                      sorted(self.score_cluster.items())}
+        
+        for cluster, score in score_sort.items():
+            print(f'cluster {cluster} - score: {score}')
+
+        
+    def calculate_cka(self):
+        '''Realiza o calcula de similaridade'''
+        clients_weights = []
+
+        for client in self.clients:
+            weights = [param.data for param in client.model.parameters()]
+            flattened_weights = torch.cat([w.view(-1) for w in weights])
+            clients_weights.append(flattened_weights)
+
+        X = clients_weights
+        
+        cka_calculator = CKA()
+        row_indices, col_indices = np.triu_indices(len(X))
+
+        matriz_similaridade_cka = np.zeros((len(X), len(X)))
+
+        for i, j in zip(row_indices, col_indices):
+            X_i = X[i].reshape(-1, 1)
+            X_j = X[j].reshape(-1, 1)
+            similaridade_cka = cka_calculator.linear_CKA(X_i, X_j)
+            
+            # Preenche a matriz simétrica com os valores
+            matriz_similaridade_cka[i, j] = similaridade_cka
+            matriz_similaridade_cka[j, i] = similaridade_cka
+        
+        return matriz_similaridade_cka
+    
+    def set_clients_cluster(self):
+        '''Cria um dicionario com clusters e clientes'''
+        clients_cluster = {chave: [] for chave in self.labels}
+        labels = list(set(self.labels))
+        
+        for label in labels:
+            for client in self.clients:
+                if client.cluster == label:
+                    clients_cluster[label].extend([client])
+        
+        self.clients_cluster = clients_cluster
+    
+    def cluster_cka(self):
+        '''Realiza a clusterização do cka'''
+
+        matriz_similaridade_cka = self.calculate_cka()
+        
+        cka_cluster = SpectralClustering(n_clusters = self.num_clusters, affinity='precomputed')
+        self.labels = cka_cluster.fit_predict(matriz_similaridade_cka)
+
+        for client, label in zip(self.clients, self.labels):
+            client.cluster = label
+        self.set_clients_cluster()
+        self.calculate_score_cluster(matriz_similaridade_cka)
+
+    def calculate_score_cluster(self, matriz_similaridade):
+        '''Calcula uma pontuação para cada cluster considerando a média de similaridade 
+        entre os clientes do cluster'''
+        self.score_cluster = {}
+        
+        for cluster_label, clientes in self.clients_cluster.items():
+            # Identifica os índices dos clientes neste cluster
+            indices_clientes = [cliente.id for cliente in clientes]  # cada cliente tem um atributo 'index'
+            # Calcula a média das similaridades para este cluster
+            soma_similaridades = 0
+            num_pares = 0
+            for i in range(len(indices_clientes)):
+                for j in range(i + 1, len(indices_clientes)):  # Evita comparar o cliente com ele mesmo e duplicatas
+                    soma_similaridades += matriz_similaridade[indices_clientes[i]][indices_clientes[j]]
+                    num_pares += 1
+                              
+            # Evita divisão por zero se o cluster tiver menos de 2 clientes
+            if num_pares > 0:
+                media_similaridade = soma_similaridades / num_pares
+            else:
+                media_similaridade = 0      
+            
+            # Armazene a pontuação média para este cluster
+            self.score_cluster[cluster_label] = media_similaridade
+            
+        return self.score_cluster
+
 # ***********************************************************************************************************************************
     def send_models(self):
         assert (len(self.clients) > 0)
@@ -349,7 +403,64 @@ class Server(object):
             client.send_time_cost['num_rounds'] += 1
             client.send_time_cost['total_cost'] += 2 * (time.time() - start_time)
 
+    '''def remove_client_fake(self):
+        # Cria uma cópia dos clientes selecionados
+        selected = self.selected_clients[:]
+        
+        # Identifica os clusters a serem removidos com base na pontuação
+        remove_clusters = [label for label, score in self.score_cluster.items() if score < 0.5]
+        
+        # Filtra os clientes a serem removidos com base nos clusters e se estão na lista selecionada
+        remove_clients = [client for client in selected if client.cluster in remove_clusters]
+        
+        # Verifica se existem clientes a serem removidos
+        if len(remove_clients) > 0:
+            print(f'Selecionados: {[client.id for client in self.selected_clients]}')
+            num_removed = len(remove_clients)
+            
+            # Seleciona substitutos com base na política de seleção (aqui você pode ajustar os parâmetros)
+            select_substitutes = self.select_entropy_size_polynomial(num_substitute=num_removed, select_substitute=True)
+            
+            # Adiciona os substitutos à lista de selecionados
+            self.selected_clients.extend(select_substitutes)
+        
+        # Remove os clientes marcados para remoção
+        for client in remove_clients:
+            print(f'Removed: {client.id}')
+            self.selected_clients.remove(client)
+        
+        # Verifica se ainda existem clientes a serem removidos
+        if len(remove_clients) > 0:
+            self.remove_client_fake()
+        else:
+            print(f'Selecionados: {[client.id for client in self.selected_clients]}')
+            print(f'Porcentagem de clientes selecionados: {(len(self.selected_clients)/self.num_clients * 100)} %')
+            print(f'ID do cliente fake: {self.id_fake}')'''
+    
+    def remove_client_fake(self):
+        # Cria uma cópia dos clientes selecionados
+        selected = self.selected_clients[:]
+        
+        # Identifica os clusters a serem removidos com base na pontuação
+        remove_clusters = [label for label, score in self.score_cluster.items() if score < 0.5]
+        
+        # Filtra os clientes a serem removidos com base nos clusters e se estão na lista selecionada
+        remove_clients = [client for client in selected if client.cluster in remove_clusters]
+        
+        # Remove os clientes marcados para remoção
+        for client in remove_clients:
+            print(f'Removed: {client.id}')
+            list(self.selected_clients).remove(client)
+
+        print(f'ID do cliente fake: {self.id_fake}')
+        print(f'Selecionados: {[client.id for client in self.selected_clients]}')
+        print(f'Porcentagem de clientes selecionados: {(len(self.selected_clients)/self.num_clients * 100)} %')
+        
+
     def receive_models(self):
+        if self.current_round > 0 and self.remove_cf == 1:
+            self.remove_client_fake()
+        
         assert (len(self.selected_clients) > 0)
 
         active_clients = self.selected_clients
@@ -375,29 +486,28 @@ class Server(object):
 
         for i, w in enumerate(self.uploaded_weights):
             self.uploaded_weights[i] = w / tot_samples
-        
+
+        if self.cluster == "CKA":
+            self.cluster_cka()
+
         return active_clients
 
     def aggregate_parameters(self):
-        
         assert (len(self.uploaded_models) > 0)
-        self.global_model = copy.deepcopy(self.uploaded_models[0]) 
-        
+
+        self.global_model = copy.deepcopy(self.uploaded_models[0])
         for param in self.global_model.parameters():
             param.data.zero_()
-        
-        self.clients_weigths = []
-        
+            
         for w, client_model in zip(self.uploaded_weights, self.uploaded_models):
-            self.add_parameters(w, client_model)  
+            self.add_parameters(w, client_model)
+
+        if self.cluster == "CKA":
+            self.cluster_cka()
     
     def add_parameters(self, w, client_model):
-        weigths = []
         for server_param, client_param in zip(self.global_model.parameters(), client_model.parameters()):
-            weigths.extend(self.valueOfList(client_param.data))
             server_param.data += client_param.data.clone() * w
-
-        self.clients_weigths.append(weigths)
         
 
     def save_global_model(self):
@@ -505,15 +615,8 @@ class Server(object):
         print("Std Test Accurancy: {:.4f}".format(np.std(accs)))
         print("Std Test AUC: {:.4f}".format(np.std(aucs)))
 
-        if (self.cluster != None) and (self.current_round > 0):
-            labels = list(set(self.labels))
-            ids_selected = [x.id for x in self.selected_clients]
-            labels_selected = list(set([x.cluster for x in self.selected_clients]))
+        if (self.cluster != None and self.current_round>0):
             self.print_cluster_clientes()
-            print(f'labels: {labels}')
-            print(f"Selected cluster: {labels_selected}")
-            print(f"Selected clients: {ids_selected}")
-        print(f'Percentage selected clients: {(len(self.selected_clients)/self.num_clients * 100)} %')
 
     def print_(self, test_acc, test_auc, train_loss):
         print("Average Test Accurancy: {:.4f}".format(test_acc))
