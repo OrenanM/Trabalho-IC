@@ -450,7 +450,8 @@ class Server(object):
         # Remove os clientes marcados para remoção
         for client in remove_clients:
             print(f'Removed: {client.id}')
-            list(self.selected_clients).remove(client)
+            self.selected_clients = list(self.selected_clients)
+            self.selected_clients.remove(client)
 
         print(f'ID do cliente fake: {self.id_fake}')
         print(f'Selecionados: {[client.id for client in self.selected_clients]}')
@@ -458,6 +459,9 @@ class Server(object):
         
 
     def receive_models(self):
+        if self.cluster == "CKA":
+            self.cluster_cka()
+            
         if self.current_round > 0 and self.remove_cf == 1:
             self.remove_client_fake()
         
@@ -486,9 +490,6 @@ class Server(object):
 
         for i, w in enumerate(self.uploaded_weights):
             self.uploaded_weights[i] = w / tot_samples
-
-        if self.cluster == "CKA":
-            self.cluster_cka()
 
         return active_clients
 
