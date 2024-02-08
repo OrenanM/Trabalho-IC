@@ -127,7 +127,7 @@ class Server(object):
 
     
 # ***********************************************************************************************************************************
-    def save_results_txt(self, acc, loss):
+    def save_results_txt(self, acc, loss, frr, fpr):
         type_sel = self.type_select
         result_path = 'result'
 
@@ -147,10 +147,10 @@ class Server(object):
         #cria o arquivo txt caso não exista
         if (not os.path.exists(path_file)) or (self.times == 0) and (self.current_round == 0):
             with open(path_file, "w") as arquivo:
-                arquivo.write(f"acc,loss\n{acc}, {loss}\n")
+                arquivo.write(f"acuracia,loss,frr,fpr\n{acc}, {loss}\n")
         else:
             with open(path_file, "a") as arquivo:
-                arquivo.write(f"{acc}, {loss}\n")
+                arquivo.write(f"{acc}, {loss}, {frr}, {fpr}\n")
     
     def calculate_entropy(self):
         entropies = np.array([client.client_entropy() for client in self.clients])
@@ -561,15 +561,19 @@ class Server(object):
         num_samples = []
         tot_correct = []
         tot_auc = []
+        fp_rate = []
+        fr_rate = []
         for c in self.clients:
-            ct, ns, auc = c.test_metrics()
+            ct, ns, auc, fpr, frr = c.test_metrics()
             tot_correct.append(ct*1.0)
             tot_auc.append(auc*ns)
             num_samples.append(ns)
+            fp_rate.append(fpr)
+            fr_rate.append(frr)
 
         ids = [c.id for c in self.clients]
 
-        return ids, num_samples, tot_correct, tot_auc
+        return ids, num_samples, tot_correct, tot_auc, fp_rate, fr_rate
 
     def train_metrics(self):
         if self.eval_new_clients and self.num_new_clients > 0:
@@ -590,6 +594,9 @@ class Server(object):
     def evaluate(self, acc=None, loss=None, nnc = 0):
         stats = self.test_metrics()
         stats_train = self.train_metrics()
+        
+        test_frr = sum(stats[5]) * 1.0 / len(stats[5]) #media dos frr
+        test_fpr = sum(stats[4]) * 1.0 / len(stats[4]) #media dos fpr
 
         test_acc = sum(stats[2])*1.0 / sum(stats[1])
         test_auc = sum(stats[3])*1.0 / sum(stats[1])
@@ -607,7 +614,7 @@ class Server(object):
         else:
             loss.append(train_loss)
 
-        self.save_results_txt(test_acc, train_loss)
+        self.save_results_txt(test_acc, train_loss, test_frr, test_fpr)
 
         print("Averaged Train Loss: {:.4f}".format(train_loss))
         print("Averaged Test Accurancy: {:.4f}".format(test_acc))
@@ -615,6 +622,8 @@ class Server(object):
         # self.print_(test_acc, train_acc, train_loss)
         print("Std Test Accurancy: {:.4f}".format(np.std(accs)))
         print("Std Test AUC: {:.4f}".format(np.std(aucs)))
+        print(f'False Rejection Rate: {test_frr:.4f}')
+        print(f'False Positive Rate: {test_fpr:.4f}')
 
         if (self.cluster != None and self.current_round>0):
             self.print_cluster_clientes()

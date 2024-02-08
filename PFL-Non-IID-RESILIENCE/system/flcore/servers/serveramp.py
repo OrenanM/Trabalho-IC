@@ -4,7 +4,7 @@ import time
 import numpy as np
 import math
 from flcore.clients.clientamp import clientAMP
-from flcore.servers.serverbase import remov
+from flcore.servers.serverbase import Server
 from threading import Thread
 from utils.dlg import DLG
 
