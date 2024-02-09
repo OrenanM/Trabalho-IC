@@ -102,6 +102,9 @@ class Client(object):
         total_fn = 0
         total_tp = 0
         total_tn = 0
+
+        train_num = 0
+        losses = 0
         
         with torch.no_grad():
             for x, y in testloaderfull:
@@ -140,7 +143,8 @@ class Client(object):
                 total_tp += tp
                 
                 ##############################################################################
-        
+                loss = self.loss(output, y)
+                losses += loss.item() * y.shape[0]
         
         fpr_micro_final = total_fp / (total_fp + total_tn) if (total_fp + total_tn) > 0 else 0
         frr_micro_final = total_fn / (total_fn + total_tp) if (total_fn + total_tp) > 0 else 0
@@ -153,7 +157,7 @@ class Client(object):
 
         auc = metrics.roc_auc_score(y_true, y_prob, average='micro')
 
-        return test_acc, test_num, auc, fpr_micro_final, frr_micro_final
+        return test_acc, test_num, auc, fpr_micro_final, frr_micro_final, losses
 
     def train_metrics(self):
         trainloader = self.load_train_data()

@@ -419,16 +419,16 @@ class Server(object):
         print(f'Porcentagem de clientes selecionados: {(len(self.selected_clients)/self.num_clients * 100)} %')
         num_remove = len(remove_clients)
         if num_remove > 0 and self.substutive_client_fake:
-            self.substutive_client(num_substitutive = num_remove)
+            self.replace_client(num_substitutive = num_remove)
         
-    def substutive_client(self, num_substitutive):
+    def replace_client(self, num_substitutive):
         #seleciona
         not_selected = [client for client in self.clients if client not in self.selected_clients]
-        selected_substutive = self.select_entropy_size_polynomial(select=not_selected, 
+        selected_substitute = self.select_entropy_size_polynomial(select=not_selected, 
                                                                   num_select=num_substitutive)
-        self.selected_clients.extend(selected_substutive)
+        self.selected_clients.extend(selected_substitute)
         #treina
-        for client in selected_substutive:
+        for client in selected_substitute:
             client.train()
 
         #clusteriza
@@ -545,19 +545,26 @@ class Server(object):
         num_samples = []
         tot_correct = []
         tot_auc = []
+
         fp_rate = []
         fr_rate = []
+
+        losses = []
+
         for c in self.clients:
-            ct, ns, auc, fpr, frr = c.test_metrics()
+            ct, ns, auc, fpr, frr, cl = c.test_metrics()
             tot_correct.append(ct*1.0)
             tot_auc.append(auc*ns)
             num_samples.append(ns)
+
             fp_rate.append(fpr)
             fr_rate.append(frr)
 
+            losses.append(cl*1.0)
+
         ids = [c.id for c in self.clients]
 
-        return ids, num_samples, tot_correct, tot_auc, fp_rate, fr_rate
+        return ids, num_samples, tot_correct, tot_auc, fp_rate, fr_rate, losses
 
     def train_metrics(self):
         if self.eval_new_clients and self.num_new_clients > 0:
@@ -584,6 +591,7 @@ class Server(object):
 
         test_acc = sum(stats[2])*1.0 / sum(stats[1])
         test_auc = sum(stats[3])*1.0 / sum(stats[1])
+        test_loss = sum(stats[6])*1.0 / sum(stats[1])
         train_loss = sum(stats_train[2])*1.0 / sum(stats_train[1])
         accs = [a / n for a, n in zip(stats[2], stats[1])]
         aucs = [a / n for a, n in zip(stats[3], stats[1])]
@@ -598,9 +606,10 @@ class Server(object):
         else:
             loss.append(train_loss)
 
-        self.save_results_txt(test_acc, train_loss, test_frr, test_fpr)
+        self.save_results_txt(test_acc, test_loss, test_frr, test_fpr)
 
         print("Averaged Train Loss: {:.4f}".format(train_loss))
+        print("Averaged Test Loss: {:.4f}".format(test_loss))
         print("Averaged Test Accurancy: {:.4f}".format(test_acc))
         print("Averaged Test AUC: {:.4f}".format(test_auc))
         # self.print_(test_acc, train_acc, train_loss)
