@@ -81,6 +81,7 @@ class Server(object):
         self.client_fake = args.client_fake
         self.num_client_fake = args.num_client_fake
         self.remove_cf = args.remove_cf
+        self.substutive_client_fake = args.substutive_client_fake
 
     def set_clients(self, clientObj):
         
@@ -140,8 +141,9 @@ class Server(object):
         if not os.path.exists(sel_path):
             os.mkdir(sel_path)
 
-        name_file = f"nclients{self.num_clients}_jr{self.join_ratio}_cf" + \
-                    f"{self.client_fake}_remove{self.remove_cf}_ncf{self.num_client_fake}.txt"
+        name_file = f"nclients{self.num_clients}_jr{self.join_ratio}_cf_" + \
+                    f"{self.client_fake}_remove{self.remove_cf}_ncf{self.num_client_fake}" + \
+                    f"substutive_cf{self.substutive_client_fake}.txt"
         path_file = os.path.join(sel_path, name_file)
 
         #cria o arquivo txt caso não exista
@@ -189,6 +191,40 @@ class Server(object):
         selected_clients = list(np.random.choice(self.clients, self.current_num_join_clients, replace=False))
         return selected_clients
     
+    def select_entropy_size_polynomial(self, num_select=0, select = None):
+        """
+        Aplica pesos considerando a entropia e o tamanho do conjunto de dados, 
+        aumentando a distância entre esses pesos por meio de uma função polinomial 
+        quíntupla, como f(x) = x⁵.
+
+            -Seleciona 2 vezes jr clientes com pesos proporcionais ao tamanho do conjunto 
+            de dados, ajustando a distância com a função polinomial quíntupla.
+            -Em seguida, escolhe jr clientes adicionais com pesos determinados pela entropia, 
+            também ajustando a distância com a função polinomial quíntupla.
+        """
+        if select is None:
+            select = self.clients
+            num_select = round(len(select) * self.join_ratio)
+        num_select_size = 2 * num_select
+
+        #Calula os pesos do dataset
+        weigth_size = np.array([client.train_samples for client in select])
+        weigth_size = weigth_size/weigth_size.sum()
+
+        #Seleciona com peso dos tamanho do dataset
+        clients_select_size = np.random.choice(select, num_select_size, 
+                                               p = weigth_size, replace=False)
+
+        #Calcula os pesos da entropia
+        weigth_entropy = np.array([client.entropy for client in clients_select_size])
+        weigth_entropy = weigth_entropy/weigth_entropy.sum()
+
+        #Seleciona com peso da entropia
+        clients_select_entropy = np.random.choice(clients_select_size, num_select,
+                                                  p=weigth_entropy, replace=False)
+        
+        return clients_select_entropy
+    
     def select_entropy_size(self):
         """
         Seleciona clientes com base em uma porcentagem (jr) do total de clientes,
@@ -205,49 +241,6 @@ class Server(object):
         weigth_size = np.array([client.train_samples for client in self.clients])
         weigth_size = weigth_size/weigth_size.sum()
 
-        #Seleciona com peso dos tamanho do dataset
-        clients_select_size = np.random.choice(self.clients, num_select_size, 
-                                               p = weigth_size, replace=False)
-
-        #Calcula os pesos da entropia
-        weigth_entropy = np.array([client.entropy for client in clients_select_size])
-        weigth_entropy = weigth_entropy/weigth_entropy.sum()
-
-        #Seleciona com peso da entropia
-        clients_select_entropy = np.random.choice(clients_select_size, num_select_entropy,
-                                                  p=weigth_entropy, replace=False)
-        
-        return clients_select_entropy
-    
-    def select_entropy_size_polynomial(self, select_substitute = False, num_substitute = 0):
-        """
-        Aplica pesos considerando a entropia e o tamanho do conjunto de dados, 
-        aumentando a distância entre esses pesos por meio de uma função polinomial 
-        quíntupla, como f(x) = x⁵.
-
-            -Seleciona 2 vezes jr clientes com pesos proporcionais ao tamanho do conjunto 
-            de dados, ajustando a distância com a função polinomial quíntupla.
-            -Em seguida, escolhe jr clientes adicionais com pesos determinados pela entropia, 
-            também ajustando a distância com a função polinomial quíntupla.
-        """
-        if select_substitute == False:
-            #seleção em todos os clientes
-            select = self.clients 
-        else: 
-            #não repete clientes ja selecionados
-            select = [client for client in self.clients if client not in self.selected_clients]
-
-        num_select_size = round(len(select) * 2 * self.join_ratio)
-
-        if num_substitute == 0:
-            num_select = round(len(self.clients) * self.join_ratio)
-        else:
-            num_select = num_substitute
-
-        #Calula os pesos do dataset
-        weigth_size = np.array([client.train_samples for client in select])
-        weigth_size = weigth_size/weigth_size.sum()
-
         #aplica a função polinomial
         weigth_size_ajusted = weigth_size ** 5
 
@@ -255,10 +248,10 @@ class Server(object):
         weigth_size_ajusted = weigth_size_ajusted/sum(weigth_size_ajusted)
 
         #Seleciona com peso dos tamanho do dataset
-        clients_select_size = np.random.choice(select, num_select_size, 
+        clients_select_size = np.random.choice(self.clients, num_select_size, 
                                                p = weigth_size_ajusted, replace=False)
 
-        #Calula os pesos do dataset da entropia
+        #Calcula os pesos da entropia
         weigth_entropy = np.array([client.entropy for client in clients_select_size])
         weigth_entropy = weigth_entropy/weigth_entropy.sum()
 
@@ -269,10 +262,11 @@ class Server(object):
         weigth_entropy_ajusted = weigth_entropy_ajusted/sum(weigth_entropy_ajusted)
 
         #Seleciona com peso da entropia
-        clients_select_entropy = np.random.choice(clients_select_size, num_select,
+        clients_select_entropy = np.random.choice(clients_select_size, num_select_entropy,
                                                   p=weigth_entropy_ajusted, replace=False)
         
         return clients_select_entropy
+       
     
     def select_entropy(self):
         "Seleciona os clientes com pesos proporcionais as suas entropias"
@@ -403,39 +397,6 @@ class Server(object):
             client.send_time_cost['num_rounds'] += 1
             client.send_time_cost['total_cost'] += 2 * (time.time() - start_time)
 
-    '''def remove_client_fake(self):
-        # Cria uma cópia dos clientes selecionados
-        selected = self.selected_clients[:]
-        
-        # Identifica os clusters a serem removidos com base na pontuação
-        remove_clusters = [label for label, score in self.score_cluster.items() if score < 0.5]
-        
-        # Filtra os clientes a serem removidos com base nos clusters e se estão na lista selecionada
-        remove_clients = [client for client in selected if client.cluster in remove_clusters]
-        
-        # Verifica se existem clientes a serem removidos
-        if len(remove_clients) > 0:
-            print(f'Selecionados: {[client.id for client in self.selected_clients]}')
-            num_removed = len(remove_clients)
-            
-            # Seleciona substitutos com base na política de seleção (aqui você pode ajustar os parâmetros)
-            select_substitutes = self.select_entropy_size_polynomial(num_substitute=num_removed, select_substitute=True)
-            
-            # Adiciona os substitutos à lista de selecionados
-            self.selected_clients.extend(select_substitutes)
-        
-        # Remove os clientes marcados para remoção
-        for client in remove_clients:
-            print(f'Removed: {client.id}')
-            self.selected_clients.remove(client)
-        
-        # Verifica se ainda existem clientes a serem removidos
-        if len(remove_clients) > 0:
-            self.remove_client_fake()
-        else:
-            print(f'Selecionados: {[client.id for client in self.selected_clients]}')
-            print(f'Porcentagem de clientes selecionados: {(len(self.selected_clients)/self.num_clients * 100)} %')
-            print(f'ID do cliente fake: {self.id_fake}')'''
     
     def remove_client_fake(self):
         # Cria uma cópia dos clientes selecionados
@@ -446,7 +407,7 @@ class Server(object):
         
         # Filtra os clientes a serem removidos com base nos clusters e se estão na lista selecionada
         remove_clients = [client for client in selected if client.cluster in remove_clusters]
-        
+        print(f'Selecionados antes da remoção: {[client.id for client in self.selected_clients]}')
         # Remove os clientes marcados para remoção
         for client in remove_clients:
             print(f'Removed: {client.id}')
@@ -456,7 +417,27 @@ class Server(object):
         print(f'ID do cliente fake: {self.id_fake}')
         print(f'Selecionados: {[client.id for client in self.selected_clients]}')
         print(f'Porcentagem de clientes selecionados: {(len(self.selected_clients)/self.num_clients * 100)} %')
-     
+        num_remove = len(remove_clients)
+        if num_remove > 0 and self.substutive_client_fake:
+            self.substutive_client(num_substitutive = num_remove)
+        
+    def substutive_client(self, num_substitutive):
+        #seleciona
+        not_selected = [client for client in self.clients if client not in self.selected_clients]
+        selected_substutive = self.select_entropy_size_polynomial(select=not_selected, 
+                                                                  num_select=num_substitutive)
+        self.selected_clients.extend(selected_substutive)
+        #treina
+        for client in selected_substutive:
+            client.train()
+
+        #clusteriza
+        self.cluster_cka()
+
+        #remove 
+        self.remove_client_fake()
+        print(f'Selecionados após substituição: {[client.id for client in self.selected_clients]}')
+
     #seleciona -> treina -> recebe -> clusteriza -> remove -> substui -> agrega
     #substituição:
     #seleciona -> treina -> recebe -> clusteriza -> remove (se não remover ninguem termina)

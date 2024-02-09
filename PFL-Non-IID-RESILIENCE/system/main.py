@@ -432,6 +432,7 @@ if __name__ == "__main__":
     parser.add_argument('-cf', '--client_fake', type = int, default=0) 
     parser.add_argument('-rcf', '--remove_cf', type = int, default=0) 
     parser.add_argument('-ncf', '--num_client_fake', type = int, default=2) 
+    parser.add_argument('-scf', '--substutive_client_fake', type = int, default=0) 
     parser.add_argument('-wse', '--weigth_size_entropy', type = int, default=0) 
 
     args = parser.parse_args()
