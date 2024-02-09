@@ -456,7 +456,10 @@ class Server(object):
         print(f'ID do cliente fake: {self.id_fake}')
         print(f'Selecionados: {[client.id for client in self.selected_clients]}')
         print(f'Porcentagem de clientes selecionados: {(len(self.selected_clients)/self.num_clients * 100)} %')
-        
+     
+    #seleciona -> treina -> recebe -> clusteriza -> remove -> substui -> agrega
+    #substituição:
+    #seleciona -> treina -> recebe -> clusteriza -> remove (se não remover ninguem termina)
 
     def receive_models(self):
         if self.cluster == "CKA":

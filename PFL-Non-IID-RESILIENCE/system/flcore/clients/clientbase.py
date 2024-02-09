@@ -97,8 +97,11 @@ class Client(object):
         test_num = 0
         y_prob = []
         y_true = []
-        fpr_micro = 0
-        frr_micro = 0
+
+        total_fp = 0
+        total_fn = 0
+        total_tp = 0
+        total_tn = 0
         
         with torch.no_grad():
             for x, y in testloaderfull:
@@ -112,31 +115,6 @@ class Client(object):
                 test_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
                 test_num += y.shape[0]
 
-                ##############################################################################
-                confusion_matrix = multilabel_confusion_matrix(y, torch.argmax(output, dim=1))
-
-                tn = confusion_matrix[:, 0, 0].sum()
-                fp = confusion_matrix[:, 0, 1].sum()
-                fn = confusion_matrix[:, 1, 0].sum()
-                tp = confusion_matrix[:, 1, 1].sum()
-
-                #calculo fpr
-                
-                result_fpr = fp/(fp+tn)
-                if np.isnan(result_fpr):
-                    fpr_micro += 0
-                else:
-                    fpr_micro += result_fpr
-
-                #calculo frr
-                result_frr = fn / (fn + tp)
-                if np.isnan(result_frr):
-                    frr_micro += 0
-                else:
-                    frr_micro += result_frr
-                
-                ##############################################################################
-
                 y_prob.append(output.detach().cpu().numpy())
                 nc = self.num_classes
                 if self.num_classes == 2:
@@ -146,9 +124,27 @@ class Client(object):
                     lb = lb[:, :2]
                 y_true.append(lb)
 
-        fpr_micro = fpr_micro / test_num
-        frr_micro = frr_micro / test_num
+                ##############################################################################
+                confusion_matrix = multilabel_confusion_matrix(y.cpu(), torch.argmax(output, dim=1).cpu())
 
+                tn = confusion_matrix[:, 0, 0].sum()
+                fp = confusion_matrix[:, 0, 1].sum()
+                fn = confusion_matrix[:, 1, 0].sum()
+                tp = confusion_matrix[:, 1, 1].sum()
+
+                #calculo fpr
+                
+                total_tn += tn
+                total_fp += fp
+                total_fn += fn
+                total_tp += tp
+                
+                ##############################################################################
+        
+        
+        fpr_micro_final = total_fp / (total_fp + total_tn) if (total_fp + total_tn) > 0 else 0
+        frr_micro_final = total_fn / (total_fn + total_tp) if (total_fn + total_tp) > 0 else 0
+        
         # self.model.cpu()
         # self.save_model(self.model, 'model')
 
@@ -157,7 +153,7 @@ class Client(object):
 
         auc = metrics.roc_auc_score(y_true, y_prob, average='micro')
 
-        return test_acc, test_num, auc, fpr_micro, frr_micro
+        return test_acc, test_num, auc, fpr_micro_final, frr_micro_final
 
     def train_metrics(self):
         trainloader = self.load_train_data()
