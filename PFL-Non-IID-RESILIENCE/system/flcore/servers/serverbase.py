@@ -82,11 +82,11 @@ class Server(object):
         self.num_client_fake = args.num_client_fake
         self.remove_cf = args.remove_cf
         self.substutive_client_fake = args.substutive_client_fake
+        self.probabity_cf = args.probabity_cf
 
     def set_clients(self, clientObj):
         
         id_client_fake = random.sample(range(self.num_clients), self.num_client_fake)
-        self.id_fake = id_client_fake
         
         print(f'Clientes falsos: {id_client_fake}')
 
@@ -143,7 +143,7 @@ class Server(object):
 
         name_file = f"nclients{self.num_clients}_jr{self.join_ratio}_cf_" + \
                     f"{self.client_fake}_remove{self.remove_cf}_ncf{self.num_client_fake}" + \
-                    f"substutive_cf{self.substutive_client_fake}.txt"
+                    f"_ncl{self.num_clusters}_pcf_{self.probabity_cf}.txt"
         path_file = os.path.join(sel_path, name_file)
 
         #cria o arquivo txt caso não exista
@@ -317,7 +317,7 @@ class Server(object):
 
         X = clients_weights
         
-        cka_calculator = CKA()
+        cka_calculator = CKA(self.device)
         row_indices, col_indices = np.triu_indices(len(X))
 
         matriz_similaridade_cka = np.zeros((len(X), len(X)))
@@ -399,6 +399,7 @@ class Server(object):
 
     
     def remove_client_fake(self):
+        self.print_cluster_clientes()
         # Cria uma cópia dos clientes selecionados
         selected = self.selected_clients[:]
         
@@ -414,7 +415,6 @@ class Server(object):
             self.selected_clients = list(self.selected_clients)
             self.selected_clients.remove(client)
 
-        print(f'ID do cliente fake: {self.id_fake}')
         print(f'Selecionados: {[client.id for client in self.selected_clients]}')
         print(f'Porcentagem de clientes selecionados: {(len(self.selected_clients)/self.num_clients * 100)} %')
         num_remove = len(remove_clients)
@@ -486,9 +486,6 @@ class Server(object):
             
         for w, client_model in zip(self.uploaded_weights, self.uploaded_models):
             self.add_parameters(w, client_model)
-
-        if self.cluster == "CKA":
-            self.cluster_cka()
     
     def add_parameters(self, w, client_model):
         for server_param, client_param in zip(self.global_model.parameters(), client_model.parameters()):
@@ -586,8 +583,8 @@ class Server(object):
         stats = self.test_metrics()
         stats_train = self.train_metrics()
         
-        test_frr = sum(stats[5]) * 1.0 / len(stats[5]) #media dos frr
-        test_fpr = sum(stats[4]) * 1.0 / len(stats[4]) #media dos fpr
+        test_frr = sum(stats[5]) * 1.0 / len(stats[5]) #mean frr
+        test_fpr = sum(stats[4]) * 1.0 / len(stats[4]) #mean fpr
 
         test_acc = sum(stats[2])*1.0 / sum(stats[1])
         test_auc = sum(stats[3])*1.0 / sum(stats[1])
@@ -618,8 +615,8 @@ class Server(object):
         print(f'False Rejection Rate: {test_frr:.4f}')
         print(f'False Positive Rate: {test_fpr:.4f}')
 
-        if (self.cluster != None and self.current_round>0):
-            self.print_cluster_clientes()
+        #if (self.cluster != None and self.current_round>0):
+        #    self.print_cluster_clientes()
 
     def print_(self, test_acc, test_auc, train_loss):
         print("Average Test Accurancy: {:.4f}".format(test_acc))

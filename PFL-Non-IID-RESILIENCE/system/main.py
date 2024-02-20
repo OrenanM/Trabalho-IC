@@ -430,6 +430,7 @@ if __name__ == "__main__":
     parser.add_argument('-ncl', "--num_clusters", type=int, default=4) # numero de cluster
     parser.add_argument('-tsa', '--type_select', type = str, default='A') 
     parser.add_argument('-cf', '--client_fake', type = int, default=0) 
+    parser.add_argument('-pcf', '--probabity_cf', type = float, default=1) 
     parser.add_argument('-rcf', '--remove_cf', type = int, default=0) 
     parser.add_argument('-ncf', '--num_client_fake', type = int, default=2) 
     parser.add_argument('-scf', '--substutive_client_fake', type = int, default=0) 

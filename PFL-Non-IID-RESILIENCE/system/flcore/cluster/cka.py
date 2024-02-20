@@ -1,8 +1,8 @@
 import torch
 
 class CKA():
-    def __init__(self):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    def __init__(self, device):
+        self.device = device
 
     def linear_HSIC(self, X, Y):
         X = X.to(self.device)
