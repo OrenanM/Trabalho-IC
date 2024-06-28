@@ -23,7 +23,6 @@ class FedAvg(Server):
     def train(self):
         self.calculate_entropy()
         for i in range(self.global_rounds+1):
-            
             s_t = time.time()
             self.selected_clients = self.select_clients()
             self.send_models()
@@ -32,11 +31,23 @@ class FedAvg(Server):
                 print(f"\n-------------Round number: {i}-------------")
                 print("\nEvaluate global model")
                 self.evaluate()
-             
+                self.n_tp_removed = 0
+                self.n_clients_fake = 0
+                self.n_removed = 0
+            
             for client in self.selected_clients:
                 client.train()
 
             self.receive_models()
+
+            #########################################
+            if self.cluster == "CKA":
+                self.cluster_cka()
+                
+            if self.remove_cf:
+                self.remove_client_fake()
+              
+            #########################################
             if self.dlg_eval and i%self.dlg_gap == 0:
                 self.call_dlg(i)
 

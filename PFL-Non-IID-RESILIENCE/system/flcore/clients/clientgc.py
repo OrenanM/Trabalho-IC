@@ -20,7 +20,7 @@ class clientGC(Client):
                 x = x.to(self.device)
             y = y.to(self.device)
             with torch.no_grad():
-                rep = self.model.base(x).detach()
+                rep = self._model.base(x).detach()
             break
         self.feature_dim = rep.shape[1]
         
@@ -39,8 +39,8 @@ class clientGC(Client):
         self.num_classes = torch.sum(sample_per_class > 0).item()
         print(f'Client {self.id} has {self.num_classes} classes.')
 
-        self.model.head = nn.Linear(self.feature_dim, self.num_classes, bias=False).to(self.device)
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
+        self._model.head = nn.Linear(self.feature_dim, self.num_classes, bias=False).to(self.device)
+        self.optimizer = torch.optim.SGD(self._model.parameters(), lr=self.learning_rate)
         self.learning_rate_scheduler = torch.optim.lr_scheduler.ExponentialLR(
             optimizer=self.optimizer, 
             gamma=args.learning_rate_decay_gamma
@@ -50,12 +50,12 @@ class clientGC(Client):
     def train(self):
         trainloader = self.load_train_data()
         # self.model.to(self.device)
-        self.model.train()
+        self._model.train()
 
         # differential privacy
         if self.privacy:
-            self.model, self.optimizer, trainloader, privacy_engine = \
-                initialize_dp(self.model, self.optimizer, trainloader, self.dp_sigma)
+            self._model, self.optimizer, trainloader, privacy_engine = \
+                initialize_dp(self._model, self.optimizer, trainloader, self.dp_sigma)
         
         start_time = time.time()
 
@@ -72,7 +72,7 @@ class clientGC(Client):
                 y = self.index_classes[y].to(self.device)
                 if self.train_slow:
                     time.sleep(0.1 * np.abs(np.random.rand()))
-                output = self.model(x)
+                output = self._model(x)
                 loss = self.loss(output, y) # softmax loss
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -91,18 +91,18 @@ class clientGC(Client):
             print(f"Client {self.id}", f"epsilon = {eps:.2f}, sigma = {DELTA}")
         
     def set_base(self, base):
-        for new_param, old_param in zip(base.parameters(), self.model.base.parameters()):
+        for new_param, old_param in zip(base.parameters(), self._model.base.parameters()):
             old_param.data = new_param.data.clone()
         
     def set_head(self, head):
-        for new_param, old_param in zip(head.parameters(), self.model.head.parameters()):
+        for new_param, old_param in zip(head.parameters(), self._model.head.parameters()):
             old_param.data = new_param.data.clone()
 
     def test_metrics(self):
         testloaderfull = self.load_test_data()
         # self.model = self.load_model('model')
         # self.model.to(self.device)
-        self.model.eval()
+        self._model.eval()
 
         test_acc = 0
         test_num = 0
@@ -116,7 +116,7 @@ class clientGC(Client):
                 else:
                     x = x.to(self.device)
                 y = self.index_classes[y].to(self.device)
-                output = self.model(x)
+                output = self._model(x)
 
                 test_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
                 test_num += y.shape[0]
@@ -145,7 +145,7 @@ class clientGC(Client):
         trainloader = self.load_train_data()
         # self.model = self.load_model('model')
         # self.model.to(self.device)
-        self.model.eval()
+        self._model.eval()
 
         train_num = 0
         losses = 0
@@ -156,7 +156,7 @@ class clientGC(Client):
                 else:
                     x = x.to(self.device)
                 y = self.index_classes[y].to(self.device)
-                output = self.model(x)
+                output = self._model(x)
                 loss = self.loss(output, y)
                 train_num += y.shape[0]
                 losses += loss.item() * y.shape[0]

@@ -1,0 +1,2 @@
+acuracia,loss,frr,fpr, removed, n_clf, tp_removed
+0.084, 2.300968692660332

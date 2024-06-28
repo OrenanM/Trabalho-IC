@@ -84,31 +84,27 @@ class Server(object):
         self.substutive_client_fake = args.substutive_client_fake
         self.probabity_cf = args.probabity_cf
 
-    def set_clients(self, clientObj):
-        
-        id_client_fake = random.sample(range(self.num_clients), self.num_client_fake)
-        
-        print(f'Clientes falsos: {id_client_fake}')
+        self.n_clients_fake = 0
+        self.n_removed = 0
+        self.n_tp_removed = 0
 
+
+    def set_clients(self, clientObj):
         for i, train_slow, send_slow in zip(range(self.num_clients), self.train_slow_clients, self.send_slow_clients):
             train_data = read_client_data(self.dataset, i, is_train=True)
             test_data = read_client_data(self.dataset, i, is_train=False)
-            if i in id_client_fake and self.client_fake == 1:
-                client = ClientFake(self.args, 
-                                    id=i, 
-                                    train_samples=len(train_data), 
-                                    test_samples=len(test_data), 
-                                    train_slow=train_slow, 
-                                    send_slow=send_slow)
-                
-            else:
-                client = clientObj(self.args, 
-                                    id=i, 
-                                    train_samples=len(train_data), 
-                                    test_samples=len(test_data), 
-                                    train_slow=train_slow, 
-                                    send_slow=send_slow)
+            client = clientObj(self.args, 
+                            id=i, 
+                            train_samples=len(train_data), 
+                            test_samples=len(test_data), 
+                            train_slow=train_slow, 
+                            send_slow=send_slow)
             self.clients.append(client)
+
+        self.dict_clients = {}
+        
+        for n, client in enumerate(self.clients):
+            self.dict_clients[f'A{n + 1}'] = client
 
     # random select slow clients
     def select_slow_clients(self, slow_rate):
@@ -130,7 +126,7 @@ class Server(object):
 # ***********************************************************************************************************************************
     def save_results_txt(self, acc, loss, frr, fpr):
         type_sel = self.type_select
-        result_path = 'result'
+        result_path = 'result2'
 
         #cria o diretório de resultados
         if not os.path.exists(result_path):
@@ -141,7 +137,7 @@ class Server(object):
         if not os.path.exists(sel_path):
             os.mkdir(sel_path)
 
-        name_file = f"nclients{self.num_clients}_jr{self.join_ratio}_cf_" + \
+        name_file = f"{self.dataset}_nclients{self.num_clients}_jr{self.join_ratio}_cf_" + \
                     f"{self.client_fake}_remove{self.remove_cf}_ncf{self.num_client_fake}" + \
                     f"_ncl{self.num_clusters}_pcf_{self.probabity_cf}.txt"
         path_file = os.path.join(sel_path, name_file)
@@ -149,10 +145,10 @@ class Server(object):
         #cria o arquivo txt caso não exista
         if (not os.path.exists(path_file)) or (self.times == 0) and (self.current_round == 0):
             with open(path_file, "w") as arquivo:
-                arquivo.write(f"acuracia,loss,frr,fpr\n{acc}, {loss}\n")
+                arquivo.write(f"acuracia,loss,frr,fpr, removed, n_clf, tp_removed\n{acc}, {loss}\n")
         else:
             with open(path_file, "a") as arquivo:
-                arquivo.write(f"{acc}, {loss}, {frr}, {fpr}\n")
+                arquivo.write(f"{acc}, {loss}, {frr}, {fpr}, {self.n_removed},{self.n_clients_fake}, {self.n_tp_removed}\n")
     
     def calculate_entropy(self):
         entropies = np.array([client.client_entropy() for client in self.clients])
@@ -166,6 +162,7 @@ class Server(object):
 
         if self.current_round == 0 and self.entropy == 1: #calcula a entropia
             self.calculate_entropy()
+
         
         #seleciona o tipo de seleção
         if self.type_select == "A":
@@ -308,10 +305,11 @@ class Server(object):
         
     def calculate_cka(self):
         '''Realiza o calcula de similaridade'''
+
         clients_weights = []
 
-        for client in self.clients:
-            weights = [param.data for param in client.model.parameters()]
+        for model in self.uploaded_models:
+            weights = [param.data for param in model.parameters()]
             flattened_weights = torch.cat([w.view(-1) for w in weights])
             clients_weights.append(flattened_weights)
 
@@ -339,7 +337,7 @@ class Server(object):
         labels = list(set(self.labels))
         
         for label in labels:
-            for client in self.clients:
+            for client in self.selected_clients:
                 if client.cluster == label:
                     clients_cluster[label].extend([client])
         
@@ -353,7 +351,7 @@ class Server(object):
         cka_cluster = SpectralClustering(n_clusters = self.num_clusters, affinity='precomputed')
         self.labels = cka_cluster.fit_predict(matriz_similaridade_cka)
 
-        for client, label in zip(self.clients, self.labels):
+        for client, label in zip(self.selected_clients, self.labels):
             client.cluster = label
         self.set_clients_cluster()
         self.calculate_score_cluster(matriz_similaridade_cka)
@@ -366,6 +364,7 @@ class Server(object):
         for cluster_label, clientes in self.clients_cluster.items():
             # Identifica os índices dos clientes neste cluster
             indices_clientes = [cliente.id for cliente in clientes]  # cada cliente tem um atributo 'index'
+            indices_clientes = [self.uploaded_ids.index(id) for id in indices_clientes]
             # Calcula a média das similaridades para este cluster
             soma_similaridades = 0
             num_pares = 0
@@ -384,7 +383,7 @@ class Server(object):
             self.score_cluster[cluster_label] = media_similaridade
             
         return self.score_cluster
-
+    
 # ***********************************************************************************************************************************
     def send_models(self):
         assert (len(self.clients) > 0)
@@ -404,16 +403,25 @@ class Server(object):
         selected = self.selected_clients[:]
         
         # Identifica os clusters a serem removidos com base na pontuação
-        remove_clusters = [label for label, score in self.score_cluster.items() if score < 0.5]
+        remove_clusters = [label for label, score in self.score_cluster.items() if score < 0.1]
         
         # Filtra os clientes a serem removidos com base nos clusters e se estão na lista selecionada
         remove_clients = [client for client in selected if client.cluster in remove_clusters]
         print(f'Selecionados antes da remoção: {[client.id for client in self.selected_clients]}')
         # Remove os clientes marcados para remoção
+
+        self.n_tp_removed = sum([x.send_fake for x in remove_clients])
+        self.n_removed = len(remove_clients)
+
+        print(f'removidos certo: {self.n_tp_removed}')
+        print(f'clientes falsos: {self.n_clients_fake}')
+        print(f'removidos: {self.n_removed}')
+        
         for client in remove_clients:
             print(f'Removed: {client.id}')
             self.selected_clients = list(self.selected_clients)
-            self.selected_clients.remove(client)
+            self.remove_client_update(client)
+            
 
         print(f'Selecionados: {[client.id for client in self.selected_clients]}')
         print(f'Porcentagem de clientes selecionados: {(len(self.selected_clients)/self.num_clients * 100)} %')
@@ -441,13 +449,30 @@ class Server(object):
     #seleciona -> treina -> recebe -> clusteriza -> remove -> substui -> agrega
     #substituição:
     #seleciona -> treina -> recebe -> clusteriza -> remove (se não remover ninguem termina)
+    def remove_client_update(self, client):
 
+        self.selected_clients.remove(client)
+
+        assert (len(self.selected_clients) > 0)
+        index_remove = self.uploaded_ids.index(client.id)
+
+        self.uploaded_models.remove(self.uploaded_models[index_remove])
+        self.uploaded_ids.remove(client.id)
+        active_clients = self.selected_clients
+
+        self.uploaded_weights = []
+        tot_samples = 0
+
+        for client in active_clients:
+            tot_samples += client.train_samples
+            self.uploaded_weights.append(client.train_samples)
+
+        for i, w in enumerate(self.uploaded_weights):
+            self.uploaded_weights[i] = w / tot_samples
+
+        return active_clients
+    
     def receive_models(self):
-        if self.cluster == "CKA":
-            self.cluster_cka()
-            
-        if self.current_round > 0 and self.remove_cf == 1:
-            self.remove_client_fake()
         
         assert (len(self.selected_clients) > 0)
 
@@ -470,10 +495,12 @@ class Server(object):
                 tot_samples += client.train_samples
                 self.uploaded_ids.append(client.id)
                 self.uploaded_weights.append(client.train_samples)
-                self.uploaded_models.append(client.model)
+                self.uploaded_models.append(client.send_local_model())
 
         for i, w in enumerate(self.uploaded_weights):
             self.uploaded_weights[i] = w / tot_samples
+        
+        self.n_clients_fake = sum([x.send_fake for x in self.selected_clients])
 
         return active_clients
 
@@ -483,7 +510,7 @@ class Server(object):
         self.global_model = copy.deepcopy(self.uploaded_models[0])
         for param in self.global_model.parameters():
             param.data.zero_()
-            
+    
         for w, client_model in zip(self.uploaded_weights, self.uploaded_models):
             self.add_parameters(w, client_model)
     

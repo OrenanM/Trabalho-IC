@@ -19,35 +19,35 @@ class clientCP(Client):
         in_dim = list(args.model.base.parameters())[-1].shape[0]
         self.context = torch.rand(1, in_dim).to(self.device)
 
-        self.model = Ensemble(
-            model=self.model, 
+        self._model = Ensemble(
+            model=self._model, 
             cs=copy.deepcopy(kwargs['ConditionalSelection']), 
-            head_g=copy.deepcopy(self.model.head), 
-            base=copy.deepcopy(self.model.base)
+            head_g=copy.deepcopy(self._model.head), 
+            base=copy.deepcopy(self._model.base)
         )
-        self.opt= torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
+        self.opt= torch.optim.SGD(self._model.parameters(), lr=self.learning_rate)
 
         self.pm_train = []
         self.pm_test = []
             
     def set_parameters(self, base):
-        for new_param, old_param in zip(base.parameters(), self.model.model.base.parameters()):
+        for new_param, old_param in zip(base.parameters(), self._model.model.base.parameters()):
             old_param.data = new_param.data.clone()
             
-        for new_param, old_param in zip(base.parameters(), self.model.base.parameters()):
+        for new_param, old_param in zip(base.parameters(), self._model.base.parameters()):
             old_param.data = new_param.data.clone()
 
 
     def set_head_g(self, head):
-        headw_p = self.model.model.head.weight.data.clone()
+        headw_p = self._model.model.head.weight.data.clone()
         headw_p.detach_()
         self.context = torch.sum(headw_p, dim=0, keepdim=True)
         
-        for new_param, old_param in zip(head.parameters(), self.model.head_g.parameters()):
+        for new_param, old_param in zip(head.parameters(), self._model.head_g.parameters()):
             old_param.data = new_param.data.clone()
 
     def set_cs(self, cs):
-        for new_param, old_param in zip(cs.parameters(), self.model.gate.cs.parameters()):
+        for new_param, old_param in zip(cs.parameters(), self._model.gate.cs.parameters()):
             old_param.data = new_param.data.clone()
 
     def save_con_items(self, items, tag='', item_path=None):
@@ -57,19 +57,19 @@ class clientCP(Client):
             self.save_item(it, 'item_' + str(idx) + '_' + tag, item_path)
 
     def generate_upload_head(self):
-        for (np, pp), (ng, pg) in zip(self.model.model.head.named_parameters(), self.model.head_g.named_parameters()):
+        for (np, pp), (ng, pg) in zip(self._model.model.head.named_parameters(), self._model.head_g.named_parameters()):
             pg.data = pp * 0.5 + pg * 0.5
 
     def test_metrics(self):
         testloader = self.load_test_data()
-        self.model.eval()
+        self._model.eval()
 
         test_acc = 0
         test_num = 0
         y_prob = []
         y_true = []
-        self.model.gate.pm_ = []
-        self.model.gate.gm_ = []
+        self._model.gate.pm_ = []
+        self._model.gate.gm_ = []
         self.pm_test = []
         
         with torch.no_grad():
@@ -79,7 +79,7 @@ class clientCP(Client):
                 else:
                     x = x.to(self.device)
                 y = y.to(self.device)
-                output = self.model(x, is_rep=False, context=self.context)
+                output = self._model(x, is_rep=False, context=self.context)
 
                 test_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
                 test_num += y.shape[0]
@@ -98,22 +98,22 @@ class clientCP(Client):
 
         auc = metrics.roc_auc_score(y_true, y_prob, average='micro')
 
-        self.pm_test.extend(self.model.gate.pm_)
+        self.pm_test.extend(self._model.gate.pm_)
         
         return test_acc, test_num, auc
 
                 
     def train_cs_model(self):
         trainloader = self.load_train_data()
-        self.model.train()
+        self._model.train()
 
         max_local_epochs = self.local_epochs
         if self.train_slow:
             max_local_epochs = np.random.randint(1, max_local_epochs // 2)
 
         for step in range(max_local_epochs):
-            self.model.gate.pm = []
-            self.model.gate.gm = []
+            self._model.gate.pm = []
+            self._model.gate.gm = []
             self.pm_train = []
             for i, (x, y) in enumerate(trainloader):
                 if type(x) == type([]):
@@ -121,14 +121,14 @@ class clientCP(Client):
                 else:
                     x = x.to(self.device)
                 y = y.to(self.device)
-                output, rep, rep_base = self.model(x, is_rep=True, context=self.context)
+                output, rep, rep_base = self._model(x, is_rep=True, context=self.context)
                 loss = self.loss(output, y)
                 loss += MMD(rep, rep_base, 'rbf', self.device) * self.lamda
                 self.opt.zero_grad()
                 loss.backward()
                 self.opt.step()
 
-        self.pm_train.extend(self.model.gate.pm)
+        self.pm_train.extend(self._model.gate.pm)
         scores = [torch.mean(pm).item() for pm in self.pm_train]
         print(np.mean(scores), np.std(scores))
 

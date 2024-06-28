@@ -12,14 +12,14 @@ class clientSCAFFOLD(Client):
     def __init__(self, args, id, train_samples, test_samples, **kwargs):
         super().__init__(args, id, train_samples, test_samples, **kwargs)
 
-        self.optimizer = SCAFFOLDOptimizer(self.model.parameters(), lr=self.learning_rate)
+        self.optimizer = SCAFFOLDOptimizer(self._model.parameters(), lr=self.learning_rate)
         self.learning_rate_scheduler = torch.optim.lr_scheduler.ExponentialLR(
             optimizer=self.optimizer, 
             gamma=args.learning_rate_decay_gamma
         )
 
         self.client_c = []
-        for param in self.model.parameters():
+        for param in self._model.parameters():
             self.client_c.append(torch.zeros_like(param))
         self.global_c = None
         self.global_model = None
@@ -27,12 +27,12 @@ class clientSCAFFOLD(Client):
     def train(self):
         trainloader = self.load_train_data()
         # self.model.to(self.device)
-        self.model.train()
+        self._model.train()
 
         # differential privacy
         if self.privacy:
-            self.model, self.optimizer, trainloader, privacy_engine = \
-                initialize_dp(self.model, self.optimizer, trainloader, self.dp_sigma)
+            self._model, self.optimizer, trainloader, privacy_engine = \
+                initialize_dp(self._model, self.optimizer, trainloader, self.dp_sigma)
         
         start_time = time.time()
 
@@ -49,7 +49,7 @@ class clientSCAFFOLD(Client):
                 y = y.to(self.device)
                 if self.train_slow:
                     time.sleep(0.1 * np.abs(np.random.rand()))
-                output = self.model(x)
+                output = self._model(x)
                 loss = self.loss(output, y)
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -72,20 +72,20 @@ class clientSCAFFOLD(Client):
             
         
     def set_parameters(self, model, global_c):
-        for new_param, old_param in zip(model.parameters(), self.model.parameters()):
+        for new_param, old_param in zip(model.parameters(), self._model.parameters()):
             old_param.data = new_param.data.clone()
 
         self.global_c = global_c
         self.global_model = model
 
     def update_yc(self):
-        for ci, c, x, yi in zip(self.client_c, self.global_c, self.global_model.parameters(), self.model.parameters()):
+        for ci, c, x, yi in zip(self.client_c, self.global_c, self.global_model.parameters(), self._model.parameters()):
             ci.data = ci - c + 1/self.num_batches/self.learning_rate * (x - yi)
 
     def delta_yc(self):
         delta_y = []
         delta_c = []
-        for c, x, yi in zip(self.global_c, self.global_model.parameters(), self.model.parameters()):
+        for c, x, yi in zip(self.global_c, self.global_model.parameters(), self._model.parameters()):
             delta_y.append(yi - x)
             delta_c.append(- c + 1/self.num_batches/self.learning_rate * (x - yi))
 

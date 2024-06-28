@@ -13,12 +13,12 @@ class clientLG(Client):
     def train(self):
         trainloader = self.load_train_data()
         # self.model.to(self.device)
-        self.model.train()
+        self._model.train()
 
         # differential privacy
         if self.privacy:
-            self.model, self.optimizer, trainloader, privacy_engine = \
-                initialize_dp(self.model, self.optimizer, trainloader, self.dp_sigma)
+            self._model, self.optimizer, trainloader, privacy_engine = \
+                initialize_dp(self._model, self.optimizer, trainloader, self.dp_sigma)
         
         start_time = time.time()
 
@@ -35,7 +35,7 @@ class clientLG(Client):
                 y = y.to(self.device)
                 if self.train_slow:
                     time.sleep(0.1 * np.abs(np.random.rand()))
-                output = self.model(x)
+                output = self._model(x)
                 loss = self.loss(output, y)
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -54,5 +54,5 @@ class clientLG(Client):
             print(f"Client {self.id}", f"epsilon = {eps:.2f}, sigma = {DELTA}")
         
     def set_parameters(self, head):
-        for new_param, old_param in zip(head.parameters(), self.model.head.parameters()):
+        for new_param, old_param in zip(head.parameters(), self._model.head.parameters()):
             old_param.data = new_param.data.clone()

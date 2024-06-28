@@ -18,7 +18,7 @@ class clientGen(Client):
                 x = x.to(self.device)
             y = y.to(self.device)
             with torch.no_grad():
-                rep = self.model.base(x).detach()
+                rep = self._model.base(x).detach()
             break
         self.feature_dim = rep.shape[1]
 
@@ -36,12 +36,12 @@ class clientGen(Client):
     def train(self):
         trainloader = self.load_train_data()
         # self.model.to(self.device)
-        self.model.train()
+        self._model.train()
 
         # differential privacy
         if self.privacy:
-            self.model, self.optimizer, trainloader, privacy_engine = \
-                initialize_dp(self.model, self.optimizer, trainloader, self.dp_sigma)
+            self._model, self.optimizer, trainloader, privacy_engine = \
+                initialize_dp(self._model, self.optimizer, trainloader, self.dp_sigma)
         
         start_time = time.time()
 
@@ -58,13 +58,13 @@ class clientGen(Client):
                 y = y.to(self.device)
                 if self.train_slow:
                     time.sleep(0.1 * np.abs(np.random.rand()))
-                output = self.model(x)
+                output = self._model(x)
                 loss = self.loss(output, y)
                 
                 labels = np.random.choice(self.qualified_labels, self.batch_size)
                 labels = torch.LongTensor(labels).to(self.device)
                 z = self.generative_model(labels)
-                loss += self.loss(self.model.head(z), labels)
+                loss += self.loss(self._model.head(z), labels)
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -85,10 +85,10 @@ class clientGen(Client):
         
     def set_parameters(self, model, generative_model):
         if self.localize_feature_extractor:
-            for new_param, old_param in zip(model.parameters(), self.model.head.parameters()):
+            for new_param, old_param in zip(model.parameters(), self._model.head.parameters()):
                 old_param.data = new_param.data.clone()
         else:
-            for new_param, old_param in zip(model.parameters(), self.model.parameters()):
+            for new_param, old_param in zip(model.parameters(), self._model.parameters()):
                 old_param.data = new_param.data.clone()
 
         self.generative_model = generative_model
@@ -97,7 +97,7 @@ class clientGen(Client):
         trainloader = self.load_train_data()
         # self.model = self.load_model('model')
         # self.model.to(self.device)
-        self.model.eval()
+        self._model.eval()
 
         train_num = 0
         losses = 0
@@ -108,13 +108,13 @@ class clientGen(Client):
                 else:
                     x = x.to(self.device)
                 y = y.to(self.device)
-                output = self.model(x)
+                output = self._model(x)
                 loss = self.loss(output, y)
                 
                 labels = np.random.choice(self.qualified_labels, self.batch_size)
                 labels = torch.LongTensor(labels).to(self.device)
                 z = self.generative_model(labels)
-                loss += self.loss(self.model.head(z), labels)
+                loss += self.loss(self._model.head(z), labels)
                 
                 train_num += y.shape[0]
                 losses += loss.item() * y.shape[0]

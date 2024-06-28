@@ -33,6 +33,8 @@ class Client(object):
         self.learning_rate = args.local_learning_rate
         self.local_epochs = args.local_epochs
 
+        
+
         # check BatchNorm
         self.has_BatchNorm = False
         for layer in self.model.children():
@@ -56,6 +58,12 @@ class Client(object):
         )
         self.learning_rate_decay = args.learning_rate_decay
 
+        self.send_fake = False
+
+    def send_local_model(self):   
+        self.send_fake = False
+        return self.model
+    
     def calculate_data_entropy(self):
         train_data = read_data(self.dataset, self.id, is_train=True)
         data_points = train_data.get('y')

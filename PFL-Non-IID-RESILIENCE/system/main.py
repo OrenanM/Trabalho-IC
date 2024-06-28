@@ -89,6 +89,8 @@ def run(args):
                 args.model = FedAvgCNN(in_features=1, num_classes=args.num_classes, dim=1024).to(args.device)
             elif "Cifar10" in args.dataset:
                 args.model = FedAvgCNN(in_features=3, num_classes=args.num_classes, dim=1600).to(args.device)
+            elif "Cifar100" in args.dataset:
+                args.model = FedAvgCNN(in_features=3, num_classes=args.num_classes, dim=1600).to(args.device)
             elif "omniglot" in args.dataset:
                 args.model = FedAvgCNN(in_features=1, num_classes=args.num_classes, dim=33856).to(args.device)
                 # args.model = CifarNet(num_classes=args.num_classes).to(args.device)
@@ -425,7 +427,7 @@ if __name__ == "__main__":
     parser.add_argument('-Te', "--T_end", type=float, default=0.98)
 
     #Variações seleção
-    parser.add_argument('-c', '--cluster', default=None)
+    parser.add_argument('-c', '--cluster', default='CKA')
     parser.add_argument('-e', "--entropy", type=int, default=1) # da pesos com as entropias
     parser.add_argument('-ncl', "--num_clusters", type=int, default=4) # numero de cluster
     parser.add_argument('-tsa', '--type_select', type = str, default='A') 
